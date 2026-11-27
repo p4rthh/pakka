@@ -1,0 +1,17 @@
+# One command: docker compose up --build   ->   http://localhost:3000
+# Starts with no keys and no .env file. To enable LLM extraction, export
+# ANTHROPIC_API_KEY or GEMINI_API_KEY in your shell (or create .env next to
+# this file); docker compose passes them through.
+services:
+  pakka:
+    build: .
+    image: pakka:local
+    ports:
+      - "3000:3000"
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_MODEL: ${ANTHROPIC_MODEL:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-}
+      PAKKA_LLM_PROVIDER: ${PAKKA_LLM_PROVIDER:-}
+    restart: unless-stopped

@@ -1,4 +1,5 @@
 import type { Speaker } from "../engine/types";
+import { envSet } from "../engine/llm";
 
 // Telephony adapter interface: STUBBED, NOT WIRED.
 //
@@ -103,5 +104,5 @@ export const adapters: Record<string, TelephonyAdapter> = {
 };
 
 export function missingEnv(adapter: TelephonyAdapter, env: Record<string, string | undefined>): string[] {
-  return adapter.requiredEnv.filter((k) => !env[k]?.trim());
+  return adapter.requiredEnv.filter((k) => !envSet(env[k]));
 }

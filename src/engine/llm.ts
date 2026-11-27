@@ -28,13 +28,19 @@ export const DEFAULT_MODELS: Record<LlmProvider, string> = {
 
 type Env = Record<string, string | undefined>;
 
+/** A real value, not blank and not an untouched .env.example placeholder ("your-...-key"). */
+export function envSet(v: string | undefined): boolean {
+  const t = v?.trim();
+  return !!t && !/^your-/i.test(t);
+}
+
 /** Pick a provider from env. PAKKA_LLM_PROVIDER forces one; otherwise the first key found wins. */
 export function resolveLlmConfig(env: Env): LlmConfig {
   const forced = env.PAKKA_LLM_PROVIDER?.trim().toLowerCase();
   if (forced === "rules" || forced === "none") {
     return { provider: null, model: null, message: "LLM disabled (PAKKA_LLM_PROVIDER=rules): using rule-based extraction" };
   }
-  const has = (k: string) => !!env[k]?.trim();
+  const has = (k: string) => envSet(env[k]);
   const pick = (p: LlmProvider): LlmConfig => {
     const model = (p === "anthropic" ? env.ANTHROPIC_MODEL : env.GEMINI_MODEL)?.trim() || DEFAULT_MODELS[p];
     return { provider: p, model, message: `LLM extraction: ${p} (${model})` };

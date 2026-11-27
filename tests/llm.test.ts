@@ -33,8 +33,9 @@ describe("resolveLlmConfig", () => {
     expect(resolveLlmConfig({ PAKKA_LLM_PROVIDER: "gemini", ANTHROPIC_API_KEY: "a" }).message).toMatch(/GEMINI_API_KEY key not set/);
     expect(resolveLlmConfig({ PAKKA_LLM_PROVIDER: "rules", ANTHROPIC_API_KEY: "a" }).provider).toBeNull();
   });
-  it("treats blank keys as unset", () => {
+  it("treats blank keys and .env.example placeholders as unset", () => {
     expect(resolveLlmConfig({ ANTHROPIC_API_KEY: "  " }).provider).toBeNull();
+    expect(resolveLlmConfig({ ANTHROPIC_API_KEY: "your-anthropic-api-key" }).provider).toBeNull();
   });
 });
 
