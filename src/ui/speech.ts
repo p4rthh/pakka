@@ -43,6 +43,8 @@ export function startSpeech(opts: {
   onFinal: (text: string, confidence: number | undefined) => void;
   onInterim: (text: string) => void;
   onError: (message: string) => void;
+  /** Recognition stopped for good (permission denied, no microphone). */
+  onStopped: () => void;
 }): SpeechHandle | null {
   const Ctor = ctor();
   if (!Ctor) return null;
@@ -64,9 +66,10 @@ export function startSpeech(opts: {
     opts.onInterim(interim);
   };
   rec.onerror = (e) => {
-    if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed" || e.error === "audio-capture") {
       active = false;
-      opts.onError("Microphone permission denied");
+      opts.onError(e.error === "audio-capture" ? "No microphone found" : "Microphone permission denied");
+      opts.onStopped();
     } else if (e.error !== "no-speech" && e.error !== "aborted") opts.onError(`Speech error: ${e.error}`);
   };
   // Chrome ends recognition after a pause; keep listening until stopped.

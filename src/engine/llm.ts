@@ -23,7 +23,7 @@ export interface LlmConfig {
 
 export const DEFAULT_MODELS: Record<LlmProvider, string> = {
   anthropic: "claude-haiku-5-5",
-  gemini: "gemini-2.5-flash",
+  gemini: "gemini-3.5-flash-lite",
 };
 
 type Env = Record<string, string | undefined>;
@@ -149,8 +149,9 @@ function vQty(q: unknown): Qty | undefined {
   const o = q as { value?: unknown; unit?: unknown };
   const value = typeof o.value === "string" ? Number(o.value) : o.value;
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
-  const unit = typeof o.unit === "string" && UNITS.has(o.unit as Unit) ? (o.unit as Unit) : undefined;
-  return { value, unit };
+  if (o.unit === undefined || o.unit === null || o.unit === "") return { value };
+  if (typeof o.unit !== "string" || !UNITS.has(o.unit as Unit)) throw new Error(`unsupported unit ${JSON.stringify(o.unit)}`);
+  return { value, unit: o.unit as Unit };
 }
 
 function vRef(r: unknown, catalogue: Catalogue): ItemRef | null {
@@ -231,6 +232,8 @@ export function parseLlmActions(raw: string, catalogue: Catalogue): Action[] {
         break;
     }
   }
+  // The model said something but none of it was usable: let the caller fall back to rules.
+  if ((parsed.actions as unknown[]).length && !out.length) throw new Error("model actions failed validation");
   return out;
 }
 

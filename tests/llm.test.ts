@@ -53,6 +53,11 @@ describe("parseLlmActions", () => {
       { type: "agree" },
     ]);
   });
+  it("throws on an unsupported unit or when every action is invalid, so the session falls back", () => {
+    expect(() => parseLlmActions(`{"actions":[{"type":"confirm","ref":{"label":"x","skuIds":["rice-kolam"]},"qty":{"value":2,"unit":"tonne"}}]}`, catalogue)).toThrow(/unit/);
+    expect(() => parseLlmActions(`{"actions":[{"type":"confirm","ref":{"label":"x","skuIds":["nope"]}}]}`, catalogue)).toThrow(/validation/);
+    expect(parseLlmActions(`{"actions":[]}`, catalogue)).toEqual([]);
+  });
   it("throws when there is no JSON", () => {
     expect(() => parseLlmActions("I could not understand", catalogue)).toThrow();
   });
@@ -99,6 +104,6 @@ describe("HTTP clients", () => {
 
   it("gemini client surfaces HTTP errors", async () => {
     const fetchStub = (async () => new Response("quota", { status: 429 })) as unknown as typeof fetch;
-    await expect(geminiClient("k", "gemini-2.5-flash", fetchStub).complete("s", "u")).rejects.toThrow(/429/);
+    await expect(geminiClient("k", "gemini-3.5-flash-lite", fetchStub).complete("s", "u")).rejects.toThrow(/429/);
   });
 });

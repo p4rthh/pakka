@@ -52,19 +52,23 @@ export const twilioAdapter: TelephonyAdapter = {
     const base = { provider: "twilio", callId, from: str(body.From), to: str(body.To) };
     const event = str(body.TranscriptionEvent);
     if (event === "transcription-content") {
-      let data: { transcript?: string; confidence?: number } = {};
+      // Only complete phrases go to the engine; partial (Final=false) results would double-count.
+      if (str(body.Final) === "false") return null;
+      let data: unknown;
       try {
         data = JSON.parse(str(body.TranscriptionData) ?? "{}");
       } catch {
         return null;
       }
-      if (!data.transcript) return null;
+      if (!data || typeof data !== "object") return null;
+      const { transcript, confidence } = data as { transcript?: unknown; confidence?: unknown };
+      if (typeof transcript !== "string" || !transcript.trim()) return null;
       return {
         ...base,
         kind: "transcript",
         speaker: str(body.Track) === "outbound_track" ? "seller" : "buyer",
-        text: data.transcript,
-        confidence: typeof data.confidence === "number" ? data.confidence : undefined,
+        text: transcript,
+        confidence: typeof confidence === "number" ? confidence : undefined,
       };
     }
     const status = str(body.CallStatus);

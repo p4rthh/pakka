@@ -85,6 +85,8 @@ export default function Console() {
   const [skuNames, setSkuNames] = useState<Record<string, string>>({});
   const [message, setMessage] = useState<string | null>(null);
   const runToken = useRef(0);
+  /** Bumped whenever the current call is abandoned; late responses from older calls are dropped. */
+  const callGen = useRef(0);
   const speech = useRef<SpeechHandle | null>(null);
   const sessionRef = useRef<SessionView | null>(null);
   const speakerRef = useRef<Speaker>("buyer");
@@ -110,7 +112,10 @@ export default function Console() {
 
   const newSession = useCallback(
     async (opts: { buyerType: BuyerType; buyerName: string; buyerPhone: string; mode: "auto" | "rules" }) => {
+      const gen = ++callGen.current;
       const r = await api<SessionView>("/api/sessions", { method: "POST", body: JSON.stringify(opts) });
+      if (gen !== callGen.current) return null;
+      sessionRef.current = r.data;
       setSession(r.data);
       setIssues(null);
       return r.data;
@@ -128,12 +133,16 @@ export default function Console() {
       method: "POST",
       body: JSON.stringify({ speaker: sp, text, confidence }),
     });
-    if (r.ok) setSession(r.data.session);
-    else setMessage(r.data.error ?? `error ${r.status}`);
+    if (sessionRef.current?.id !== s.id) return; // call was replaced meanwhile
+    if (r.ok) {
+      sessionRef.current = r.data.session;
+      setSession(r.data.session);
+    } else setMessage(r.data.error ?? `error ${r.status}`);
   }, []);
 
   const stopAll = () => {
     runToken.current++;
+    callGen.current++;
     speech.current?.stop();
     speech.current = null;
     setListening(false);
@@ -145,10 +154,12 @@ export default function Console() {
     stopAll();
     const token = ++runToken.current;
     const script = (await api<ScriptFull>(`/api/demo-scripts/${scriptId}`)).data;
+    if (token !== runToken.current) return;
     setBuyerType(script.buyerType);
     setBuyerName(script.buyerName);
     setBuyerPhone(script.buyerPhone);
     const s = await newSession({ buyerType: script.buyerType, buyerName: script.buyerName, buyerPhone: script.buyerPhone, mode: "rules" });
+    if (!s || token !== runToken.current) return;
     setDemoState("playing");
     for (const line of script.lines) {
       await sleep(line.pauseMs / speed);
@@ -175,14 +186,24 @@ export default function Console() {
       return;
     }
     const s = await ensureSession();
+    if (!s) return;
+    const gen = callGen.current;
     const handle = startSpeech({
       lang,
       onFinal: (text, confidence) => {
+        if (gen !== callGen.current) return; // mic belonged to a call that was replaced
         setInterim(null);
-        if (text.trim()) void send(sessionRef.current ?? s, speakerRef.current, text, confidence);
+        if (text.trim()) void send(s, speakerRef.current, text, confidence);
       },
-      onInterim: (text) => setInterim(text ? { speaker: speakerRef.current, text } : null),
+      onInterim: (text) => {
+        if (gen === callGen.current) setInterim(text ? { speaker: speakerRef.current, text } : null);
+      },
       onError: (m) => setMessage(m),
+      onStopped: () => {
+        speech.current = null;
+        setListening(false);
+        setInterim(null);
+      },
     });
     if (!handle) {
       setMessage("This browser has no Web Speech API. Use Chrome or Edge, or type lines instead.");
@@ -193,16 +214,22 @@ export default function Console() {
   };
 
   const sendTyped = async () => {
-    if (!typed.trim()) return;
+    const submitted = typed;
+    if (!submitted.trim()) return;
     const s = await ensureSession();
-    await send(s, speaker, typed);
-    setTyped("");
+    if (!s) return;
+    await send(s, speaker, submitted);
+    // Keep anything typed while the request was in flight.
+    setTyped((cur) => (cur === submitted ? "" : cur));
   };
 
   const readBack = async () => {
     if (!session) return;
     const r = await api<SessionView>(`/api/sessions/${session.id}/readback`, { method: "POST" });
-    if (r.ok) setSession(r.data);
+    if (r.ok && sessionRef.current?.id === session.id) {
+      sessionRef.current = r.data;
+      setSession(r.data);
+    }
   };
 
   const confirm = async (force = false) => {
@@ -211,7 +238,9 @@ export default function Console() {
       method: "POST",
       body: JSON.stringify({ force }),
     });
+    if (sessionRef.current?.id !== session.id) return;
     if (r.ok && r.data.session) {
+      sessionRef.current = r.data.session;
       setSession(r.data.session);
       setIssues(null);
       void loadInsights();

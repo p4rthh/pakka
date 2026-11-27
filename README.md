@@ -68,7 +68,7 @@ All are optional. See `.env.example`, and copy it to `.env.local` for `npm run d
 | `ANTHROPIC_API_KEY` | Enables LLM extraction via the Anthropic Messages API. |
 | `ANTHROPIC_MODEL` | Default `claude-haiku-5-5`. |
 | `GEMINI_API_KEY` | Enables LLM extraction via Gemini; used if no Anthropic key is set. |
-| `GEMINI_MODEL` | Default `gemini-2.5-flash`. |
+| `GEMINI_MODEL` | Default `gemini-3.5-flash-lite`. |
 | `PAKKA_LLM_PROVIDER` | Forces a provider: `anthropic`, `gemini` or `rules` (`rules` never calls an LLM). |
 | `TWILIO_*`, `EXOTEL_*` | For the telephony adapters. They are stubs, so these only change the "key not set" message. |
 

@@ -9,6 +9,8 @@ describe("telephony adapters (stubs)", () => {
     });
     expect(twilioAdapter.parseWebhook({ ...base, Track: "outbound_track", TranscriptionData: '{"transcript":"Toh final"}' })?.speaker).toBe("seller");
     expect(twilioAdapter.parseWebhook({ ...base, TranscriptionData: "not json" })).toBeNull();
+    expect(twilioAdapter.parseWebhook({ ...base, TranscriptionData: "null" })).toBeNull();
+    expect(twilioAdapter.parseWebhook({ ...base, Final: "false", TranscriptionData: '{"transcript":"Kol"}' })).toBeNull();
   });
 
   it("twilio: call status callbacks", () => {

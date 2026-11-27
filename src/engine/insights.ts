@@ -18,7 +18,9 @@ export function insightsFromCall(state: ConversationState, catalogue: Catalogue,
     }
     if (!sku) continue;
     if (sku.brand !== "Loose") {
-      events.push({ kind: "brand_ask", at, buyerType: state.buyerType, skuId: sku.id, label: sku.name, brand: sku.brand, reason: c.state });
+      // "confirmed" means bought: an out-of-stock item can be wanted but never bought.
+      const outcome = c.state === "confirmed" && !c.unavailable ? "confirmed" : c.state === "rejected" ? "rejected" : "asked";
+      events.push({ kind: "brand_ask", at, buyerType: state.buyerType, skuId: sku.id, label: sku.name, brand: sku.brand, reason: outcome });
     }
     if (c.unavailable && c.state !== "rejected") {
       const chosen = confirmedIn(sku.category);

@@ -288,6 +288,30 @@ describe("low-confidence speech", () => {
   });
 });
 
+describe("conversation focus (review regressions)", () => {
+  it("an unclear line between the seller's offer and 'chalega' does not lose the offer", async () => {
+    const s = await run([B("Dettol hai kya?"), S("Dettol khatam hai, Lifebuoy hai."), B("hmm hmm", 0.2), B("chalega, 2 piece")]);
+    expect(cand(s, "soap-lifebuoy")).toMatchObject({ state: "confirmed", qty: { value: 2, unit: "piece" } });
+  });
+
+  it("'rehne do' after an unknown product drops that product, not the previous item", async () => {
+    const s = await run([B("Kolam 5 kilo de do"), B("Maggi 4 packet bhi de do"), B("nahi rehne do")]);
+    expect(cand(s, "rice-kolam").state).toBe("confirmed");
+    expect(s.candidates.find((c) => c.unknown)?.state).toBe("rejected");
+  });
+
+  it("quantity carries over from the most recent rejection, not the first one created", async () => {
+    const s = await run([B("Kohinoor 3 kilo"), B("Daawat 7 kilo"), B("Daawat nahi, Kohinoor nahi"), B("Kolam de do")]);
+    expect(cand(s, "rice-kolam").qty).toEqual({ value: 3, unit: "kg" });
+  });
+
+  it("an out-of-stock item is never counted as bought in brand asks", async () => {
+    const s = await run([B("basmati 2 kilo de do"), B("India Gate wala")]);
+    const ev = insightsFromCall(s, catalogue, "2026-11-27T10:00:00.000Z").find((e) => e.kind === "brand_ask");
+    expect(ev?.reason).toBe("asked");
+  });
+});
+
 describe("seller lines", () => {
   it("never confirm anything on their own", async () => {
     const s = await run([S("Kolam 25 kilo, Tata namak 10 packet de deta hoon")]);

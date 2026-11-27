@@ -115,6 +115,8 @@ export interface Candidate {
   /** Bare number given with no unit: the engine assumed the base unit. */
   unitAssumed?: boolean;
   reason?: RejectReason;
+  /** Ordering key of the latest rejection (line index * 1000 + order within the line). */
+  rejectedAt?: number;
   /** Possible SKUs while the reference is ambiguous. */
   options?: string[];
   /** The SKU is out of stock: the buyer wanted it but it cannot be billed. */

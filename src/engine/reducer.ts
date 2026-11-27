@@ -42,6 +42,8 @@ interface Ctx {
   catalogue: Catalogue;
   index: number;
   touched: Set<string>;
+  /** Order of rejections within this line, so "most recent" survives several rejections in one line. */
+  seq: number;
 }
 
 function note(c: Candidate, ctx: Ctx, text: string, state: ConversationState) {
@@ -131,16 +133,16 @@ function setQty(c: Candidate, qty: Qty, ctx: Ctx, state: ConversationState) {
 
 /** Most recently rejected candidate in the same category, from this or the previous buyer line. */
 function recentlyRejected(state: ConversationState, c: Candidate, ctx: Ctx): Candidate | undefined {
-  return [...state.candidates]
-    .reverse()
-    .find(
+  return state.candidates
+    .filter(
       (o) =>
         o !== c &&
         o.state === "rejected" &&
         o.qty &&
         o.category === c.category &&
-        o.history.some((h) => h.utterance >= ctx.index - 2),
-    );
+        (o.rejectedAt ?? -1) >= (ctx.index - 2) * 1000,
+    )
+    .sort((a, b) => (b.rejectedAt ?? 0) - (a.rejectedAt ?? 0))[0];
 }
 
 function confirm(state: ConversationState, c: Candidate, qty: Qty | undefined, ctx: Ctx) {
@@ -169,6 +171,7 @@ function reject(state: ConversationState, c: Candidate, reason: RejectReason, ct
   note(c, ctx, `rejected (${reason})`, state);
   c.state = "rejected";
   c.reason = reason;
+  c.rejectedAt = ctx.index * 1000 + ctx.seq++;
   if (state.focusId === c.id) {
     const other = [...state.candidates].reverse().find((o) => o.id !== c.id && ACTIVE(o));
     state.focusId = other?.id ?? null;
@@ -184,7 +187,11 @@ function setCard(state: ConversationState, ctx: Ctx, skuIds: string[], title: st
 
 /** The thing a nameless "chalega" / "nahi" refers to. */
 function focusTarget(state: ConversationState, ctx: Ctx): { candidate?: Candidate; suggestionSku?: string } {
-  if (state.suggestion && state.suggestion.utterance === ctx.index - 1) return { suggestionSku: state.suggestion.skuId };
+  if (state.suggestion) {
+    // The offer must be the last line actually heard; ignored (unclear) lines in between do not count.
+    const between = state.transcript.filter((l) => l.index > state.suggestion!.utterance && l.index < ctx.index);
+    if (between.every((l) => l.ignored)) return { suggestionSku: state.suggestion.skuId };
+  }
   const c = state.candidates.find((x) => x.id === state.focusId);
   return { candidate: c };
 }
@@ -238,7 +245,12 @@ function applyOne(state: ConversationState, a: Action, ctx: Ctx) {
     }
     case "reject_focus": {
       const t = focusTarget(state, ctx);
-      if (t.suggestionSku) reject(state, upsert(state, skuRef(ctx, t.suggestionSku), ctx), "declined-substitute", ctx);
+      if (t.suggestionSku) {
+        // Turning down something the seller offered in place of the buyer's ask is a declined substitute;
+        // turning down the buyer's own item after the seller quotes it keeps the buyer's reason ("mehenga").
+        const own = state.candidates.some((c) => c.skuId === t.suggestionSku);
+        reject(state, upsert(state, skuRef(ctx, t.suggestionSku), ctx), own ? a.reason : "declined-substitute", ctx);
+      }
       else if (t.candidate) reject(state, t.candidate, a.reason, ctx);
       return;
     }
@@ -252,7 +264,8 @@ function applyOne(state: ConversationState, a: Action, ctx: Ctx) {
       const fresh = [...new Set(a.skuIds)].filter((id) => {
         const sku = skuById(ctx.catalogue, id);
         const cand = state.candidates.find((c) => c.skuId === id);
-        return sku && sku.stock > 0 && !cand;
+        // Re-offering something only asked about still counts; an item already confirmed does not.
+        return sku && sku.stock > 0 && cand?.state !== "confirmed";
       });
       state.suggestion = fresh.length === 1 ? { skuId: fresh[0], utterance: ctx.index } : null;
       return;
@@ -273,6 +286,7 @@ function applyOne(state: ConversationState, a: Action, ctx: Ctx) {
         note(c, ctx, `asked for "${a.label}" — not in catalogue`, state);
       }
       if (a.qty) setQty(c, a.qty, ctx, state);
+      state.focusId = c.id;
       return;
     }
     case "readback":
@@ -294,7 +308,7 @@ export interface ReduceOptions {
 
 export function reduce(prev: ConversationState, actions: Action[], opts: ReduceOptions): ConversationState {
   const state: ConversationState = structuredClone(prev);
-  const ctx: Ctx = { catalogue: opts.catalogue, index: opts.index, touched: new Set() };
+  const ctx: Ctx = { catalogue: opts.catalogue, index: opts.index, touched: new Set(), seq: 0 };
   const phaseBefore = state.phase;
   for (const a of actions) applyOne(state, a, ctx);
   // Any change after the buyer agreed reopens the read-back.
