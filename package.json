@@ -1,0 +1,15 @@
+{
+  "name": "phone-order-munim",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Phone calls become priced bills, packing slips and WhatsApp confirmations. Voice-first order desk for Indian shops.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  }
+}
