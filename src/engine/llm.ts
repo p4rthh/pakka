@@ -144,11 +144,13 @@ export function buildUserPrompt(state: ConversationState, catalogue: Catalogue, 
 const UNITS = new Set<Unit>(["kg", "gram", "litre", "packet", "piece", "bori", "dabba"]);
 const REASONS = new Set<RejectReason>(["price", "changed-mind", "swapped", "declined-substitute", "other"]);
 
+/** Omitted qty -> undefined; a supplied but invalid qty throws so the line falls back to rules. */
 function vQty(q: unknown): Qty | undefined {
-  if (!q || typeof q !== "object") return undefined;
+  if (q === undefined || q === null) return undefined;
+  if (typeof q !== "object") throw new Error(`invalid qty ${JSON.stringify(q)}`);
   const o = q as { value?: unknown; unit?: unknown };
-  const value = typeof o.value === "string" ? Number(o.value) : o.value;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+  const value = typeof o.value === "string" && o.value.trim() ? Number(o.value) : o.value;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) throw new Error(`invalid qty ${JSON.stringify(q)}`);
   if (o.unit === undefined || o.unit === null || o.unit === "") return { value };
   if (typeof o.unit !== "string" || !UNITS.has(o.unit as Unit)) throw new Error(`unsupported unit ${JSON.stringify(o.unit)}`);
   return { value, unit: o.unit as Unit };

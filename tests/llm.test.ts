@@ -45,7 +45,7 @@ describe("parseLlmActions", () => {
       {"type":"confirm","ref":{"label":"kolam","skuIds":["rice-kolam","made-up"]},"qty":{"value":"5","unit":"kg"}},
       {"type":"reject","ref":{"label":"x","skuIds":["nope"]},"reason":"price"},
       {"type":"teleport"},
-      {"type":"set_qty","ref":{"label":"lux","skuIds":["soap-lux"]},"qty":{"value":-1}},
+      {"type":"set_qty","ref":{"label":"lux","skuIds":["soap-lux"]}},
       {"type":"agree"}
     ]}`;
     expect(parseLlmActions(raw, catalogue)).toEqual({
@@ -58,6 +58,7 @@ describe("parseLlmActions", () => {
   });
   it("throws on an unsupported unit; an empty list is a valid no-op", () => {
     expect(() => parseLlmActions(`{"actions":[{"type":"confirm","ref":{"label":"x","skuIds":["rice-kolam"]},"qty":{"value":2,"unit":"tonne"}}]}`, catalogue)).toThrow(/unit/);
+    expect(() => parseLlmActions(`{"actions":[{"type":"set_qty","ref":{"label":"lux","skuIds":["soap-lux"]},"qty":{"value":-1}}]}`, catalogue)).toThrow(/qty/);
     expect(parseLlmActions(`{"actions":[]}`, catalogue)).toEqual({ actions: [], dropped: 0 });
   });
   it("throws when there is no JSON", () => {

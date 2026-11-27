@@ -131,7 +131,9 @@ export async function startReadback(session: Session): Promise<void> {
   await addUtterance(session, { speaker: "seller", text: "Toh final" });
 }
 
-export function confirmSession(session: Session, force = false): { issues: ConfirmIssue[]; result?: ConfirmResult } {
+export async function confirmSession(session: Session, force = false): Promise<{ issues: ConfirmIssue[]; result?: ConfirmResult }> {
+  // Bill only after every line already said has been processed.
+  await session.queue;
   if (session.result) return { issues: [], result: session.result };
   const issues = confirmIssues(session.state, catalogue);
   const blocking = force ? issues.filter((i) => i.problem === "nothing confirmed yet") : issues;
