@@ -72,7 +72,9 @@ jobs:
             exit 1
           fi
 
-          TEL_JSON=$(curl -s -X POST http://localhost:3000/api/telephony/twilio)
+          echo "Asserting telephony stub reports 'key not set'..."
+          TEL_JSON=$(curl -s -X POST http://localhost:3000/api/telephony/twilio \
+            -d "CallSid=CA1&From=%2B919820012345&To=%2B912222222222&TranscriptionEvent=transcription-content&Track=inbound_track&TranscriptionData=%7B%22transcript%22%3A%22Kolam+5+kilo%22%7D")
           echo "Telephony: $TEL_JSON"
           if echo "$TEL_JSON" | grep -q "key not set"; then
             echo "Verified: telephony stub reports 'key not set'."
