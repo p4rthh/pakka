@@ -169,8 +169,14 @@ function vRef(r: unknown, catalogue: Catalogue): ItemRef | null {
   };
 }
 
-/** Validate untrusted model output into engine actions. Throws if nothing usable came back. */
-export function parseLlmActions(raw: string, catalogue: Catalogue): Action[] {
+export interface ParsedLlmActions {
+  actions: Action[];
+  /** Model actions that failed validation (unknown type, unknown SKU, bad quantity). */
+  dropped: number;
+}
+
+/** Validate untrusted model output into engine actions. Throws if there is no usable JSON. */
+export function parseLlmActions(raw: string, catalogue: Catalogue): ParsedLlmActions {
   const start = raw.indexOf("{");
   const end = raw.lastIndexOf("}");
   if (start < 0 || end <= start) throw new Error("no JSON in model output");
@@ -232,9 +238,7 @@ export function parseLlmActions(raw: string, catalogue: Catalogue): Action[] {
         break;
     }
   }
-  // The model said something but none of it was usable: let the caller fall back to rules.
-  if ((parsed.actions as unknown[]).length && !out.length) throw new Error("model actions failed validation");
-  return out;
+  return { actions: out, dropped: (parsed.actions as unknown[]).length - out.length };
 }
 
 export function llmExtractor(client: LlmClient): Extractor {
@@ -242,7 +246,10 @@ export function llmExtractor(client: LlmClient): Extractor {
     name: client.name,
     async extract({ utterance, state, catalogue }) {
       const raw = await client.complete(SYSTEM_PROMPT, buildUserPrompt(state, catalogue, utterance.speaker, utterance.text));
-      const actions = parseLlmActions(raw, catalogue);
+      const { actions, dropped } = parseLlmActions(raw, catalogue);
+      // Never half-apply a line: one bad action (e.g. a reject with an unknown SKU) could leave the
+      // order inconsistent, so the whole line falls back to the rule-based extractor instead.
+      if (dropped > 0) throw new Error(`${dropped} model action(s) failed validation`);
       // Seller lines may only offer or read back; never let a model confirm on the buyer's behalf.
       if (utterance.speaker === "seller") return actions.filter((a) => a.type === "suggest" || a.type === "readback");
       return actions;

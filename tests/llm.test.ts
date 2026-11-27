@@ -48,15 +48,17 @@ describe("parseLlmActions", () => {
       {"type":"set_qty","ref":{"label":"lux","skuIds":["soap-lux"]},"qty":{"value":-1}},
       {"type":"agree"}
     ]}`;
-    expect(parseLlmActions(raw, catalogue)).toEqual([
-      { type: "confirm", ref: { label: "kolam", skuIds: ["rice-kolam"], categoryOnly: undefined, category: "rice" }, qty: { value: 5, unit: "kg" } },
-      { type: "agree" },
-    ]);
+    expect(parseLlmActions(raw, catalogue)).toEqual({
+      actions: [
+        { type: "confirm", ref: { label: "kolam", skuIds: ["rice-kolam"], categoryOnly: undefined, category: "rice" }, qty: { value: 5, unit: "kg" } },
+        { type: "agree" },
+      ],
+      dropped: 3,
+    });
   });
-  it("throws on an unsupported unit or when every action is invalid, so the session falls back", () => {
+  it("throws on an unsupported unit; an empty list is a valid no-op", () => {
     expect(() => parseLlmActions(`{"actions":[{"type":"confirm","ref":{"label":"x","skuIds":["rice-kolam"]},"qty":{"value":2,"unit":"tonne"}}]}`, catalogue)).toThrow(/unit/);
-    expect(() => parseLlmActions(`{"actions":[{"type":"confirm","ref":{"label":"x","skuIds":["nope"]}}]}`, catalogue)).toThrow(/validation/);
-    expect(parseLlmActions(`{"actions":[]}`, catalogue)).toEqual([]);
+    expect(parseLlmActions(`{"actions":[]}`, catalogue)).toEqual({ actions: [], dropped: 0 });
   });
   it("throws when there is no JSON", () => {
     expect(() => parseLlmActions("I could not understand", catalogue)).toThrow();
@@ -76,6 +78,14 @@ describe("llmExtractor", () => {
     const r = await processUtterance(createConversation("household"), { speaker: "seller", text: "Toh final: Lux 2" }, { catalogue, extractor: ex });
     expect(r.state.candidates).toHaveLength(0);
     expect(r.state.phase).toBe("readback");
+  });
+
+  it("falls back to rules for the whole line when any model action is invalid", async () => {
+    const ex = llmExtractor(fake(`{"actions":[{"type":"reject","ref":{"label":"x","skuIds":["nope"]},"reason":"price"},{"type":"confirm","ref":{"label":"Kolam","skuIds":["rice-kolam"]}}]}`));
+    const r = await processUtterance(createConversation("household"), { speaker: "buyer", text: "Daawat nahi, Kolam 2 kilo de do" }, { catalogue, extractor: ex });
+    expect(r.line.extractor).toBe("rules");
+    expect(r.state.warnings[0]).toMatch(/failed validation/);
+    expect(r.state.candidates.find((c) => c.skuId === "rice-daawat")?.state).toBe("rejected");
   });
 
   it("falls back to the rule-based extractor when the model call fails", async () => {
