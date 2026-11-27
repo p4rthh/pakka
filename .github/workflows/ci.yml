@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    name: CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright e2e tests
+        run: npm run test:e2e
+
+      - name: Start Docker Compose without .env and verify
+        run: |
+          # Verify no .env or .env.local file is present
+          rm -f .env .env.local
+
+          # Start container via docker compose
+          docker compose up -d --build
+
+          # Wait for mapped port (3000) to respond
+          echo "Waiting for app on port 3000..."
+          timeout=120
+          until curl -fsS http://localhost:3000/api/status >/dev/null 2>&1; do
+            sleep 2
+            timeout=$((timeout - 2))
+            if [ $timeout -le 0 ]; then
+              echo "Timeout waiting for port 3000 to become ready"
+              exit 1
+            fi
+          done
+
+          # Assert with curl that the response is the Pakka main screen
+          echo "Asserting Pakka main screen..."
+          MAIN_HTML=$(curl -fsS http://localhost:3000/)
+          if echo "$MAIN_HTML" | grep -q "Pakka"; then
+            echo "Main screen verified: found Pakka marker."
+          else
+            echo "Error: Pakka marker not found on main screen!"
+            exit 1
+          fi
+
+          # Assert that a key-dependent path reports 'key not set' rather than crashing
+          echo "Asserting key-dependent path reports 'key not set'..."
+          STATUS_JSON=$(curl -fsS http://localhost:3000/api/status)
+          echo "Status: $STATUS_JSON"
+          if echo "$STATUS_JSON" | grep -q "key not set"; then
+            echo "Verified: key-dependent path reports 'key not set'."
+          else
+            echo "Error: 'key not set' not reported by status endpoint!"
+            exit 1
+          fi
+
+          echo "Asserting telephony stub reports 'key not set'..."
+          TEL_JSON=$(curl -s -X POST http://localhost:3000/api/telephony/twilio \
+            -d "CallSid=CA1&From=%2B919820012345&To=%2B912222222222&TranscriptionEvent=transcription-content&Track=inbound_track&TranscriptionData=%7B%22transcript%22%3A%22Kolam+5+kilo%22%7D")
+          echo "Telephony: $TEL_JSON"
+          if echo "$TEL_JSON" | grep -q "key not set"; then
+            echo "Verified: telephony stub reports 'key not set'."
+          else
+            echo "Error: 'key not set' not reported by telephony endpoint!"
+            exit 1
+          fi
+
+      - name: Print docker compose logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Tear down docker compose
+        if: always()
+        run: docker compose down -v --remove-orphans
